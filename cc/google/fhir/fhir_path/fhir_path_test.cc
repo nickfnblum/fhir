@@ -663,6 +663,44 @@ TYPED_TEST(Stu3AndR4FhirPathTest, TestLogicalValueFieldExists) {
               EvalsToTrue());
 }
 
+TYPED_TEST(FhirPathTest, TestFunctionExistsWithCriteria) {
+  auto observation = ParseFromString<typename TypeParam::CodeableConcept>(R"pb(
+    coding {
+      system { value: "foo" }
+      code { value: "abc" }
+    }
+    coding {
+      system { value: "bar" }
+      code { value: "ghi" }
+    }
+  )pb");
+
+  EXPECT_THAT(
+      TestFixture::Evaluate(observation, "coding.exists(system = 'bar')"),
+      EvalsToTrue());
+  EXPECT_THAT(TestFixture::Evaluate(observation, "coding.code.exists(true)"),
+              EvalsToTrue());
+}
+
+TYPED_TEST(FhirPathTest, TestFunctionExistsWithCriteriaNoMatches) {
+  EXPECT_THAT(TestFixture::Evaluate("('a' | 'b' | 'c').exists(false)"),
+              EvalsToFalse());
+  EXPECT_THAT(TestFixture::Evaluate("{}.exists(true)"), EvalsToFalse());
+}
+
+TYPED_TEST(FhirPathTest, TestFunctionExistsWithInvalidCriteria) {
+  EXPECT_THAT(TestFixture::Evaluate("{}.exists(true, false)"),
+              HasStatusCode(StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      TestFixture::Evaluate(ValidObservation<typename TypeParam::Observation>(),
+                            "code.coding.exists(does_not_exist = 'foo')"),
+      HasStatusCode(StatusCode::kInvalidArgument));
+  EXPECT_THAT(
+      TestFixture::Evaluate(ValidObservation<typename TypeParam::Observation>(),
+                            "code.coding.exists(foo())"),
+      HasStatusCode(StatusCode::kInvalidArgument));
+}
+
 TYPED_TEST(Stu3AndR4FhirPathTest, TestFunctionHasValueNegation) {
   auto test_encounter = ValidEncounter<typename TypeParam::Encounter>();
   EXPECT_THAT(
@@ -700,6 +738,8 @@ TYPED_TEST(FhirPathTest, TestFunctionChildren) {
       UnorderedElementsAreArray(
           {EqualsProto(structure_definition.snapshot().element(0)),
            EqualsProto(structure_definition.differential().element(0))}));
+
+  EXPECT_THAT(TestFixture::Evaluate("(1 | 2).children()"), EvalsToEmpty());
 }
 
 TYPED_TEST(FhirPathTest, TestFunctionDescendants) {
@@ -725,6 +765,9 @@ TYPED_TEST(FhirPathTest, TestFunctionDescendants) {
            EqualsProto(structure_definition.differential().element(0)),
            EqualsProto(
                structure_definition.differential().element(0).label())}));
+
+  EXPECT_THAT(TestFixture::Evaluate("('foo' | 'bar').descendants()"),
+              EvalsToEmpty());
 }
 
 TYPED_TEST(FhirPathTest, TestFunctionDescendantsOnEmptyCollection) {
@@ -1819,9 +1862,8 @@ TYPED_TEST(FhirPathTest, TestSelect) {
 }
 
 TYPED_TEST(FhirPathTest, TestSelectEmptyResult) {
-  EXPECT_THAT(TestFixture::Evaluate("{}.where(true)"), EvalsToEmpty());
-  EXPECT_THAT(TestFixture::Evaluate("(1 | 2 | 3).where(false)"),
-              EvalsToEmpty());
+  EXPECT_THAT(TestFixture::Evaluate("{}.select(true)"), EvalsToEmpty());
+  EXPECT_THAT(TestFixture::Evaluate("(1 | 2 | 3).select({})"), EvalsToEmpty());
 }
 
 TYPED_TEST(FhirPathTest, TestSelectValidatesArguments) {
@@ -2368,6 +2410,30 @@ TYPED_TEST(FhirPathTest, TimeComparison) {
   )pb");
   EXPECT_THAT(TestFixture::Evaluate(dst_transition, "start <= end"),
               EvalsToTrue());
+}
+
+TYPED_TEST(FhirPathTest, TimeComparison_Instant) {
+  auto observation = ParseFromString<typename TypeParam::Observation>(R"pb(
+    # 2001-10-28T01:59:00Z
+    meta: {
+      last_updated: {
+        value_us: 1004234340000000
+        timezone: "UTC"
+        precision: MICROSECOND
+      }
+    }
+  )pb");
+  EXPECT_THAT(
+      TestFixture::Evaluate(observation, "meta.lastUpdated = meta.lastUpdated"),
+      EvalsToTrue());
+  EXPECT_THAT(
+      TestFixture::Evaluate(observation, "meta.lastUpdated < meta.lastUpdated"),
+      EvalsToFalse());
+  EXPECT_THAT(
+      TestFixture::Evaluate(observation,
+                            "meta.lastUpdated < @2001-10-28T01:59:10Z and "
+                            "@2001-10-28T01:58:50 < meta.lastUpdated"),
+      EvalsToTrue());
 }
 
 TYPED_TEST(FhirPathTest, TimeCompareDifferentPrecision) {

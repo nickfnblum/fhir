@@ -1,11 +1,8 @@
-package(
-    
-    default_visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
-
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "fhirvalidate",
@@ -16,6 +13,7 @@ go_library(
         "//go/jsonformat/internal/jsonpbhelper",
         "//proto/google/fhir/proto:annotations_go_proto",
         "//proto/google/fhir/proto/r4/core:datatypes_go_proto",
+        "//proto/google/fhir/proto/r5/core:datatypes_go_proto",
         "//proto/google/fhir/proto/stu3:datatypes_go_proto",
         "@org_bitbucket_creachadair_stringset//:go_default_library",
         "@org_golang_google_protobuf//proto:go_default_library",
@@ -40,6 +38,13 @@ go_test(
         "//proto/google/fhir/proto/r4/core/resources:device_request_go_proto",
         "//proto/google/fhir/proto/r4/core/resources:operation_outcome_go_proto",
         "//proto/google/fhir/proto/r4/core/resources:patient_go_proto",
+        "//proto/google/fhir/proto/r5/core:codes_go_proto",
+        "//proto/google/fhir/proto/r5/core:datatypes_go_proto",
+        "//proto/google/fhir/proto/r5/core:valuesets_go_proto",
+        "//proto/google/fhir/proto/r5/core/resources:bundle_and_contained_resource_go_proto",
+        "//proto/google/fhir/proto/r5/core/resources:immunization_go_proto",
+        "//proto/google/fhir/proto/r5/core/resources:operation_outcome_go_proto",
+        "//proto/google/fhir/proto/r5/core/resources:patient_go_proto",
         "//proto/google/fhir/proto/stu3:codes_go_proto",
         "//proto/google/fhir/proto/stu3:datatypes_go_proto",
         "//proto/google/fhir/proto/stu3:resources_go_proto",

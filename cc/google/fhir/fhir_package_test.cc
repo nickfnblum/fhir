@@ -649,6 +649,71 @@ TEST(FhirPackageTest, LoadWithUserProvidedHandlerReturnsErrorsFromHandler) {
             absl::StatusCode::kInvalidArgument);
 }
 
+TEST(FhirPackageTest, ImplementationGuideEmptyForPackageWithoutIG) {
+  FHIR_ASSERT_OK_AND_ASSIGN(
+      std::string temp_name,
+      CreateZipFileContaining(
+          {{"a_value_set.json",
+            R"({"resourceType": "ValueSet", "url": "http://value.set/id",
+                "version": "1.0", "id": "a-value-set", "status": "draft"})"}}));
+  absl::Cleanup temp_closer = [&temp_name] { remove(temp_name.c_str()); };
+
+  FHIR_ASSERT_OK_AND_ASSIGN(std::unique_ptr<FhirPackage> fhir_package,
+                            FhirPackage::Load(temp_name));
+
+  EXPECT_EQ(fhir_package->implementation_guide, nullptr);
+}
+
+TEST(FhirPackageTest, IgR4Ignored) {
+  FHIR_ASSERT_OK_AND_ASSIGN(
+      std::string temp_name,
+      CreateZipFileContaining(
+          {{"ig-r4.json", "gobbledygook ( that \" doesn't parse"}}));
+  absl::Cleanup temp_closer = [&temp_name] { remove(temp_name.c_str()); };
+
+  FHIR_ASSERT_OK_AND_ASSIGN(std::unique_ptr<FhirPackage> fhir_package,
+                            FhirPackage::Load(temp_name));
+
+  EXPECT_EQ(fhir_package->implementation_guide, nullptr);
+}
+
+TEST(FhirPackageTest, ImplementationGuidePopulatedForPackageWithIG) {
+  FHIR_ASSERT_OK_AND_ASSIGN(std::string temp_name,
+                            CreateZipFileContaining({{"ig.json",
+                                                      R"json(
+            {
+              "resourceType": "ImplementationGuide",
+              "url": "igurl"
+            }
+            )json"}}));
+  absl::Cleanup temp_closer = [&temp_name] { remove(temp_name.c_str()); };
+
+  FHIR_ASSERT_OK_AND_ASSIGN(std::unique_ptr<FhirPackage> fhir_package,
+                            FhirPackage::Load(temp_name));
+
+  EXPECT_EQ(fhir_package->implementation_guide->url().value(), "igurl");
+}
+
+TEST(FhirPackageTest, ImplementationGuideWithInvalidIdSucceeds) {
+  FHIR_ASSERT_OK_AND_ASSIGN(std::string temp_name,
+                            CreateZipFileContaining({{"ig.json",
+                                                      R"json(
+            {
+              "resourceType": "ImplementationGuide",
+              "url": "igurl",
+              "id": "thisisaverylongidstringthatshouldntbevalidbutmostexternalvalidatorsdontseemtocarethatthereisa64charlimitonids"
+            }
+            )json"}}));
+  absl::Cleanup temp_closer = [&temp_name] { remove(temp_name.c_str()); };
+
+  FHIR_ASSERT_OK_AND_ASSIGN(std::unique_ptr<FhirPackage> fhir_package,
+                            FhirPackage::Load(temp_name));
+
+  EXPECT_EQ(fhir_package->implementation_guide->id().value(),
+            "thisisaverylongidstringthatshouldntbevalidbutmostexternalvalidator"
+            "sdontseemtocarethatthereisa64charlimitonids");
+}
+
 TEST(ResourceCollectionTest, GetResourceFromCacheHasPointerStability) {
   ResourceCollection<fhir::r4::core::ValueSet> collection;
 

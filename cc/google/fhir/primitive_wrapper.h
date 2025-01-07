@@ -43,7 +43,7 @@
 #include "google/fhir/extensions.h"
 #include "google/fhir/json/fhir_json.h"
 #include "google/fhir/json_format_results.h"
-#include "google/fhir/json_util.h"
+#include "google/fhir/json/json_util.h"
 #include "google/fhir/status/status.h"
 #include "google/fhir/status/statusor.h"
 #include "google/fhir/type_macros.h"
@@ -964,7 +964,10 @@ class PositiveIntWrapper : public IntegerTypeWrapper<PositiveIntType> {
   }
 };
 
-constexpr uint64_t DAY_IN_US = 24L * 60 * 60 * 1000 * 1000;
+// One day in microseconds: 24L * 60 * 60 * 1000 * 1000
+// Hard code expression for web assembly complilation, to avoid range outside of
+// long type error.
+constexpr uint64_t DAY_IN_US = 86400000000;
 
 template <typename TimeLike>
 class TimeWrapper : public StringInputWrapper<TimeLike> {

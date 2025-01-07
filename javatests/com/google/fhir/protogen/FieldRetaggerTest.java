@@ -18,8 +18,11 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.fhir.proto.Annotations;
 import com.google.fhir.proto.ProtoGeneratorAnnotations;
 import com.google.protobuf.DescriptorProtos.DescriptorProto;
+import com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
+import com.google.protobuf.DescriptorProtos.MessageOptions;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -262,5 +265,155 @@ public final class FieldRetaggerTest {
 
     assertThrows(
         IllegalStateException.class, () -> FieldRetagger.retagMessage(newMessage, goldenMessage));
+  }
+
+  @Test
+  public void retagMessage_changedPrimitiveType_moved() {
+    DescriptorProto newMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f1")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_STRING))
+            .build();
+
+    DescriptorProto goldenMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f1")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_INT32))
+            .build();
+
+    DescriptorProto.Builder expectedMessage = newMessage.toBuilder();
+    expectedMessage.getFieldBuilder(0).setNumber(2);
+
+    assertThat(FieldRetagger.retagMessage(newMessage, goldenMessage))
+        .isEqualTo(expectedMessage.build());
+  }
+
+  @Test
+  public void retagMessage_changedMessageType_moved() {
+    DescriptorProto newMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f1")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("Wibble"))
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f2")
+                    .setNumber(2)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("Blat"))
+            .build();
+
+    DescriptorProto goldenMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f1")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("Wobble"))
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("f2")
+                    .setNumber(2)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("Blat"))
+            .build();
+
+    DescriptorProto.Builder expectedMessage = newMessage.toBuilder();
+    expectedMessage.getFieldBuilder(0).setNumber(3);
+
+    assertThat(FieldRetagger.retagMessage(newMessage, goldenMessage))
+        .isEqualTo(expectedMessage.build());
+  }
+
+  @Test
+  public void retagMessage_changedValueSetBinding_moved() {
+    DescriptorProto newMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("status")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("package.Top.StatusCode"))
+            .addNestedType(
+                DescriptorProto.newBuilder()
+                    .setName("StatusCode")
+                    .setOptions(
+                        MessageOptions.newBuilder()
+                            .setExtension(Annotations.fhirValuesetUrl, "url-1"))
+                    .build())
+            .build();
+
+    DescriptorProto goldenMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("status")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("package.Top.StatusCode"))
+            .addNestedType(
+                DescriptorProto.newBuilder()
+                    .setName("StatusCode")
+                    .setOptions(
+                        MessageOptions.newBuilder()
+                            .setExtension(Annotations.fhirValuesetUrl, "url-2"))
+                    .build())
+            .build();
+
+    DescriptorProto.Builder expectedMessage = newMessage.toBuilder();
+    expectedMessage.getFieldBuilder(0).setNumber(2);
+
+    assertThat(FieldRetagger.retagMessage(newMessage, goldenMessage))
+        .isEqualTo(expectedMessage.build());
+  }
+
+  @Test
+  public void retagMessage_changedCardinality_moved() {
+    DescriptorProto newMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("status")
+                    .setNumber(1)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("package.Faaz")
+                    .setLabel(FieldDescriptorProto.Label.LABEL_OPTIONAL))
+            .build();
+
+    DescriptorProto goldenMessage =
+        DescriptorProto.newBuilder()
+            .setName("Top")
+            .addField(
+                FieldDescriptorProto.newBuilder()
+                    .setName("status")
+                    .setNumber(1)
+                    .setLabel(FieldDescriptorProto.Label.LABEL_REPEATED)
+                    .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName("package.Faaz"))
+            .build();
+
+    DescriptorProto.Builder expectedMessage = newMessage.toBuilder();
+    expectedMessage.getFieldBuilder(0).setNumber(2);
+
+    assertThat(FieldRetagger.retagMessage(newMessage, goldenMessage))
+        .isEqualTo(expectedMessage.build());
   }
 }

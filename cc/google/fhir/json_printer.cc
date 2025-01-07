@@ -36,7 +36,7 @@
 #include "google/fhir/extensions.h"
 #include "google/fhir/fhir_types.h"
 #include "google/fhir/json_format.h"
-#include "google/fhir/json_util.h"
+#include "google/fhir/json/json_util.h"
 #include "google/fhir/primitive_handler.h"
 #include "google/fhir/proto_util.h"
 #include "google/fhir/r4/codeable_concepts.h"
@@ -46,6 +46,7 @@
 #include "google/fhir/status/statusor.h"
 #include "google/fhir/util.h"
 #include "proto/google/fhir/proto/annotations.pb.h"
+#include "google/protobuf/message.h"
 
 namespace google {
 namespace fhir {
@@ -111,7 +112,7 @@ class Printer {
     }
   }
 
-  void PrintFieldPreamble(const std::string& name) {
+  void PrintFieldPreamble(absl::string_view name) {
     absl::StrAppend(&output_, "\"", name, "\": ");
   }
 
@@ -217,14 +218,14 @@ class Printer {
 
       // TODO(b/148916862): Use a registry to determine the correct
       // ContainedResource to unpack to.
-      if (dynamic_cast<const Any&>(proto).UnpackTo(contained.get())) {
+      if (google::protobuf::DownCastToGenerated<Any>(proto).UnpackTo(contained.get())) {
         return PrintContainedResource(*contained);
       }
 
       // If we can't unpack the Any proto as a contained resource, try to unpack
       // it as a contained resource `one of` field.
       std::optional<std::unique_ptr<google::protobuf::Message>> resource_msg =
-          ExtractConcreteMessage(dynamic_cast<const Any&>(proto));
+          ExtractConcreteMessage(google::protobuf::DownCastToGenerated<Any>(proto));
       if (resource_msg == std::nullopt) {
         // Unable to extract Any proto into a concrete message. This could
         // happen if the proto is not a core FHIR resource. In this case we
@@ -382,7 +383,7 @@ class Printer {
   }
 
   absl::Status PrintPrimitiveField(const Message& proto,
-                                   const std::string& field_name) {
+                                   absl::string_view field_name) {
     // TODO(b/153462178): check for ReferenceId using an annotation.
     if (json_format_ == kFormatAnalytic &&
         proto.GetDescriptor()->name() == "ReferenceId") {
@@ -414,7 +415,7 @@ class Printer {
   }
 
   absl::Status PrintChoiceTypeField(const Message& choice_container,
-                                    const std::string& json_name) {
+                                    absl::string_view json_name) {
     const google::protobuf::Reflection* choice_reflection =
         choice_container.GetReflection();
     const google::protobuf::Descriptor* choice_descriptor =
@@ -433,7 +434,7 @@ class Printer {
     }
     const google::protobuf::FieldDescriptor* value_field =
         choice_reflection->GetOneofFieldDescriptor(choice_container, oneof);
-    std::string oneof_field_name = FhirJsonName(value_field);
+    std::string oneof_field_name(FhirJsonName(value_field));
     oneof_field_name[0] = toupper(oneof_field_name[0]);
 
     if (IsPrimitive(value_field->message_type())) {
@@ -549,9 +550,9 @@ class Printer {
             });
         break;
       default:
-        return InvalidArgumentError(
-            "Unsupported FHIR Version for profiling for resource: " +
-            profiled_codeable_concept.GetDescriptor()->full_name());
+        return InvalidArgumentError(absl::StrCat(
+            "Unsupported FHIR Version for profiling for resource: ",
+            profiled_codeable_concept.GetDescriptor()->full_name()));
     }
 
     return std::move(analytic_codeable_concept);
@@ -609,8 +610,8 @@ absl::StatusOr<std::string> WriteMessage(Printer printer,
   if (IsProfile(message.GetDescriptor())) {
     if (GetFhirVersion(message) != proto::R4) {
       return InvalidArgumentError(
-          "Unsupported FHIR Version for profiling for resource: " +
-          message.GetDescriptor()->full_name());
+          absl::StrCat("Unsupported FHIR Version for profiling for resource: ",
+                       message.GetDescriptor()->full_name()));
     }
     // Unprofile before writing, since JSON should be based on raw proto
     // Note that these are "lenient" profilings, because it doesn't make

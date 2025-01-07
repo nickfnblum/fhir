@@ -26,8 +26,11 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
+#include "google/fhir/error_reporter.h"
 #include "google/fhir/json/fhir_json.h"
 #include "google/fhir/json/json_sax_handler.h"
+#include "google/fhir/r4/json_format.h"
 #include "google/fhir/status/status.h"
 #include "google/fhir/status/statusor.h"
 #include "proto/google/fhir/proto/r4/core/datatypes.pb.h"
@@ -75,17 +78,31 @@ absl::Status MaybeAddResourceToFhirPackage(
   } else if (*resource_type == "SearchParameter") {
     FHIR_RETURN_IF_ERROR(
         fhir_package.search_parameters.Put(parent_resource, resource_json));
+  } else if (*resource_type == "ImplementationGuide") {
+    fhir_package.implementation_guide =
+        std::make_unique<google::fhir::r4::core::ImplementationGuide>();
+    FHIR_RETURN_IF_ERROR(google::fhir::r4::MergeJsonFhirObjectIntoProto(
+        resource_json, fhir_package.implementation_guide.get(),
+        absl::UTCTimeZone(), /*validate=*/false,
+        FailFastErrorHandler::FailOnFatalOnly()));
   } else if (*resource_type == "Bundle") {
-    FHIR_ASSIGN_OR_RETURN(const internal::FhirJson* entries,
-                          resource_json.get("entry"));
-    FHIR_ASSIGN_OR_RETURN(int num_entries, entries->arraySize());
+    absl::StatusOr<const internal::FhirJson*> entries =
+        resource_json.get("entry");
+    if (!entries.status().ok()) {
+      // No entries, nothing to add.
+      return absl::OkStatus();
+    }
+    FHIR_ASSIGN_OR_RETURN(int num_entries, (*entries)->arraySize());
 
     for (int i = 0; i < num_entries; ++i) {
-      FHIR_ASSIGN_OR_RETURN(const internal::FhirJson* entry, entries->get(i));
-      FHIR_ASSIGN_OR_RETURN(const internal::FhirJson* resource,
-                            entry->get("resource"));
-      FHIR_RETURN_IF_ERROR(MaybeAddResourceToFhirPackage(
-          parent_resource, *resource, fhir_package));
+      FHIR_ASSIGN_OR_RETURN(const internal::FhirJson* entry,
+                            (*entries)->get(i));
+      absl::StatusOr<const internal::FhirJson*> resource =
+          entry->get("resource");
+      if (resource.status().ok()) {
+        FHIR_RETURN_IF_ERROR(MaybeAddResourceToFhirPackage(
+            parent_resource, **resource, fhir_package));
+      }
     }
   }
   // We got a resource type, but it's not one of the ones we track.  Ignore.
@@ -96,6 +113,13 @@ absl::Status MaybeAddEntryToFhirPackage(absl::string_view entry_name,
                                         absl::string_view resource_json,
                                         FhirPackage& fhir_package) {
   if (!absl::EndsWith(entry_name, ".json")) {
+    // Ignore non-JSON files.
+    return absl::OkStatus();
+  }
+  if (absl::EndsWith(entry_name, "ig-r4.json")) {
+    // ig-r4.json is a Grahame-special file that should be ignored at all costs.
+    // see:
+    // https://chat.fhir.org/#narrow/stream/179250-bulk-data/topic/Why.20are.20there.20two.20IG.20resources.3F/near/422507754
     return absl::OkStatus();
   }
 

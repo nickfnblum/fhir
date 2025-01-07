@@ -2,10 +2,7 @@ load("//bazel:antlr4_cc.bzl", "antlr4_cc_lexer", "antlr4_cc_parser")
 
 licenses(["notice"])
 
-package(
-    
-    default_visibility = ["//visibility:public"],
-)
+package(default_visibility = ["//visibility:public"])
 
 exports_files(["FhirPath.g4"])
 
@@ -82,10 +79,10 @@ cc_library(
         ":fhir_path",
         "//cc/google/fhir:annotations",
         "//cc/google/fhir:error_reporter",
-        "//cc/google/fhir:json_util",
         "//cc/google/fhir:primitive_handler",
         "//cc/google/fhir:proto_util",
         "//cc/google/fhir:util",
+        "//cc/google/fhir/json:json_util",
         "//cc/google/fhir/status",
         "//cc/google/fhir/status:statusor",
         "//proto/google/fhir/proto:annotations_cc_proto",
@@ -123,9 +120,7 @@ cc_library(
         "fhir_path_types.h",
     ],
     strip_include_prefix = "//cc/",
-    visibility = [
-        "//visibility:private",  # Only private by automation, not intent. Owner may accept CLs adding visibility. See go/scheuklappen#explicit-private.
-    ],
+    visibility = ["//visibility:private"],
     deps = [
         "//cc/google/fhir:annotations",
         "//cc/google/fhir:fhir_types",
@@ -146,14 +141,12 @@ cc_library(
         "utils.h",
     ],
     strip_include_prefix = "//cc/",
-    visibility = [
-        "//visibility:private",  # Only private by automation, not intent. Owner may accept CLs adding visibility. See go/scheuklappen#explicit-private.
-    ],
+    visibility = ["//visibility:private"],
     deps = [
         "//cc/google/fhir:annotations",
-        "//cc/google/fhir:json_util",
         "//cc/google/fhir:references",
         "//cc/google/fhir:util",
+        "//cc/google/fhir/json:json_util",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",

@@ -49,6 +49,7 @@
 #include "google/fhir/fhir_path/fhir_path_types.h"
 #include "google/fhir/fhir_path/utils.h"
 #include "google/fhir/fhir_types.h"
+#include "google/fhir/primitive_handler.h"
 #include "google/fhir/proto_util.h"
 #include "google/fhir/status/status.h"
 #include "google/fhir/status/statusor.h"
@@ -56,6 +57,7 @@
 #include "proto/google/fhir/proto/r4/core/datatypes.pb.h"
 #include "icu4c/source/common/unicode/unistr.h"
 #include "google/protobuf/descriptor.h"
+#include "google/protobuf/message.h"
 
 namespace google {
 namespace fhir {
@@ -706,22 +708,66 @@ class SingleValueFunctionNode : public SingleParameterFunctionNode {
 };
 
 // Implements the FHIRPath .exists() function
-class ExistsFunction : public ZeroParameterFunctionNode {
+class ExistsFunction : public FunctionNode {
  public:
+  static absl::Status ValidateParams(
+      const std::vector<std::shared_ptr<ExpressionNode>>& params) {
+    if (params.size() > 1) {
+      return InvalidArgumentError("Function requires 0 or 1 arguments.");
+    }
+
+    return absl::OkStatus();
+  }
+
+  static absl::StatusOr<std::vector<std::shared_ptr<ExpressionNode>>>
+  CompileParams(const std::vector<FhirPathParser::ExpressionContext*>& params,
+                FhirPathBaseVisitor*,
+                FhirPathBaseVisitor* child_context_visitor) {
+    return FunctionNode::CompileParams(params, child_context_visitor);
+  }
+
   ExistsFunction(const std::shared_ptr<ExpressionNode>& child,
                  const std::vector<std::shared_ptr<ExpressionNode>>& params)
-      : ZeroParameterFunctionNode(child, params) {}
+      : FunctionNode(child, params) {
+    FHIR_DCHECK_OK(ValidateParams(params));
+  }
 
   absl::Status Evaluate(WorkSpace* work_space,
                         std::vector<WorkspaceMessage>* results) const override {
     std::vector<WorkspaceMessage> child_results;
     FHIR_RETURN_IF_ERROR(child_->Evaluate(work_space, &child_results));
 
+    if (params_.empty()) {
+      Message* result =
+          work_space->GetPrimitiveHandler()->NewBoolean(!child_results.empty());
+      work_space->DeleteWhenFinished(result);
+      results->push_back(WorkspaceMessage(result));
+      return absl::OkStatus();
+    }
+
+    for (const WorkspaceMessage& message : child_results) {
+      std::vector<WorkspaceMessage> param_results;
+      WorkSpace expression_work_space(work_space->GetPrimitiveHandler(),
+                                      work_space->MessageContextStack(),
+                                      message);
+      FHIR_RETURN_IF_ERROR(
+          params_[0]->Evaluate(&expression_work_space, &param_results));
+      FHIR_ASSIGN_OR_RETURN(
+          absl::StatusOr<std::optional<bool>> allowed,
+          (BooleanOrEmpty(work_space->GetPrimitiveHandler(), param_results)));
+      if (allowed.value().value_or(false)) {
+        Message* result =
+            work_space->GetPrimitiveHandler()->NewBoolean(true);
+        work_space->DeleteWhenFinished(result);
+        results->push_back(WorkspaceMessage(result));
+        return absl::OkStatus();
+      }
+    }
+
     Message* result =
-        work_space->GetPrimitiveHandler()->NewBoolean(!child_results.empty());
+        work_space->GetPrimitiveHandler()->NewBoolean(false);
     work_space->DeleteWhenFinished(result);
     results->push_back(WorkspaceMessage(result));
-
     return absl::OkStatus();
   }
 
@@ -2284,7 +2330,7 @@ class IifFunction : public FunctionNode {
                 FhirPathBaseVisitor* base_context_visitor,
                 FhirPathBaseVisitor* child_context_visitor) {
     if (params.size() < 2 || params.size() > 3) {
-      return InvalidArgumentError("iif() requires 2 or 3 arugments.");
+      return InvalidArgumentError("iif() requires 2 or 3 arguments.");
     }
 
     std::vector<std::shared_ptr<ExpressionNode>> compiled_params;
@@ -2579,6 +2625,9 @@ class ChildrenFunction : public ZeroParameterFunctionNode {
 
     for (const WorkspaceMessage& child : child_results) {
       const Descriptor* descriptor = child.Message()->GetDescriptor();
+      if (IsPrimitive(descriptor)) {
+        continue;
+      }
       for (int i = 0; i < descriptor->field_count(); i++) {
         std::vector<const Message*> messages;
         FHIR_RETURN_IF_ERROR(
@@ -2995,7 +3044,8 @@ class ComparisonOperator : public BinaryOperator {
 
     } else if (IsSystemString(*left_result) && IsSystemString(*right_result)) {
       return EvalStringComparison(primitive_handler, left, right);
-    } else if (IsDateTime(*left_result) && IsDateTime(*right_result)) {
+    } else if ((IsInstant(*left_result) || IsDateTime(*left_result)) &&
+               (IsInstant(*right_result) || IsDateTime(*right_result))) {
       return EvalDateTimeComparison(primitive_handler, *left_result,
                                     *right_result);
     } else if (IsSimpleQuantity(*left_result) &&
@@ -3103,12 +3153,33 @@ class ComparisonOperator : public BinaryOperator {
   absl::StatusOr<absl::optional<bool>> EvalDateTimeComparison(
       const PrimitiveHandler* primitive_handler, const Message& left_message,
       const Message& right_message) const {
-    FHIR_ASSIGN_OR_RETURN(
-        DateTimePrecision left_precision,
-        primitive_handler->GetDateTimePrecision(left_message));
-    FHIR_ASSIGN_OR_RETURN(
-        DateTimePrecision right_precision,
-        primitive_handler->GetDateTimePrecision(right_message));
+    const Message* left = &left_message;
+    const Message* right = &right_message;
+    std::vector<std::unique_ptr<const Message>> to_delete;
+    if (IsInstant(left_message)) {
+      FHIR_ASSIGN_OR_RETURN(
+          JsonPrimitive json_primitive,
+          primitive_handler->WrapPrimitiveProto(left_message));
+      json_primitive.value = absl::StripPrefix(json_primitive.value, "\"");
+      json_primitive.value = absl::StripSuffix(json_primitive.value, "\"");
+      FHIR_ASSIGN_OR_RETURN(
+          left, primitive_handler->NewDateTime(json_primitive.value));
+      to_delete.push_back(std::unique_ptr<const Message>(left));
+    }
+    if (IsInstant(right_message)) {
+      FHIR_ASSIGN_OR_RETURN(
+          JsonPrimitive json_primitive,
+          primitive_handler->WrapPrimitiveProto(right_message));
+      json_primitive.value = absl::StripPrefix(json_primitive.value, "\"");
+      json_primitive.value = absl::StripSuffix(json_primitive.value, "\"");
+      FHIR_ASSIGN_OR_RETURN(
+          right, primitive_handler->NewDateTime(json_primitive.value));
+      to_delete.push_back(std::unique_ptr<const Message>(right));
+    }
+    FHIR_ASSIGN_OR_RETURN(DateTimePrecision left_precision,
+                          primitive_handler->GetDateTimePrecision(*left));
+    FHIR_ASSIGN_OR_RETURN(DateTimePrecision right_precision,
+                          primitive_handler->GetDateTimePrecision(*right));
 
     // The FHIRPath spec (http://hl7.org/fhirpath/#comparison) states that "If
     // one value is specified to a different level of precision than the other,
@@ -3120,9 +3191,9 @@ class ComparisonOperator : public BinaryOperator {
     }
 
     FHIR_ASSIGN_OR_RETURN(absl::Time left_time,
-                          primitive_handler->GetDateTimeValue(left_message));
+                          primitive_handler->GetDateTimeValue(*left));
     FHIR_ASSIGN_OR_RETURN(absl::Time right_time,
-                          primitive_handler->GetDateTimeValue(right_message));
+                          primitive_handler->GetDateTimeValue(*right));
 
     // negative if left < right, positive if left > right, 0 if equal
     absl::civil_diff_t time_difference =

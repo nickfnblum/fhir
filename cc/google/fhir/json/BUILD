@@ -1,9 +1,6 @@
 licenses(["notice"])
 
-package(
-    
-    default_visibility = ["//visibility:public"],
-)
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "fhir_json",
@@ -39,7 +36,6 @@ cc_library(
         ":fhir_json",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:optional",
@@ -64,6 +60,35 @@ cc_test(
     deps = [
         ":json_sax_handler",
         ":test_matchers",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "json_util",
+    srcs = ["json_util.cc"],
+    hdrs = ["json_util.h"],
+    strip_include_prefix = "//cc/",
+    deps = [
+        "//cc/google/fhir:annotations",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_test(
+    name = "json_util_test",
+    srcs = ["json_util_test.cc"],
+    deps = [
+        ":json_util",
+        "//cc/google/fhir/status",
+        "//proto/google/fhir/proto/r4/core:datatypes_cc_proto",
+        "//proto/google/fhir/proto/r4/core/resources:observation_cc_proto",
+        "//proto/google/fhir/proto/r4/core/resources:patient_cc_proto",
         "@com_google_googletest//:gtest_main",
     ],
 )

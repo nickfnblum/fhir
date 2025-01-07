@@ -29,7 +29,7 @@
 #include "google/fhir/annotations.h"
 #include "google/fhir/error_reporter.h"
 #include "google/fhir/fhir_path/fhir_path.h"
-#include "google/fhir/json_util.h"
+#include "google/fhir/json/json_util.h"
 #include "google/fhir/primitive_handler.h"
 #include "google/fhir/proto_util.h"
 #include "google/fhir/status/status.h"
@@ -74,48 +74,48 @@ class ValidationResultsErrorHandler : public ErrorHandler {
     return ValidationResults(results_);
   }
   absl::Status HandleFhirPathFatal(const absl::Status& status,
-                                   std::string_view expression,
-                                   std::string_view element_path,
-                                   std::string_view field_path) override {
+                                   absl::string_view expression,
+                                   absl::string_view element_path,
+                                   absl::string_view field_path) override {
     results_.push_back(
         ValidationResult(field_path, element_path, expression, status));
     return absl::OkStatus();
   }
 
-  absl::Status HandleFhirPathError(std::string_view expression,
-                                   std::string_view element_path,
-                                   std::string_view field_path) override {
+  absl::Status HandleFhirPathError(absl::string_view expression,
+                                   absl::string_view element_path,
+                                   absl::string_view field_path) override {
     results_.push_back(
         ValidationResult(field_path, element_path, expression, false));
     return absl::OkStatus();
   }
 
-  absl::Status HandleFhirPathWarning(std::string_view msg,
-                                     std::string_view element_path,
-                                     std::string_view field_path) override {
+  absl::Status HandleFhirPathWarning(absl::string_view msg,
+                                     absl::string_view element_path,
+                                     absl::string_view field_path) override {
     // Legacy FHIRPath API does not support warnings.
     return absl::OkStatus();
   }
 
   absl::Status HandleFhirFatal(const absl::Status& status,
-                               std::string_view element_path,
-                               std::string_view field_path) override {
+                               absl::string_view element_path,
+                               absl::string_view field_path) override {
     return absl::InternalError(
         "ValidationResultsErrorHandler should only use FHIRPath APIs.");
     return absl::OkStatus();
   }
 
-  absl::Status HandleFhirError(std::string_view msg,
-                               std::string_view element_path,
-                               std::string_view field_path) override {
+  absl::Status HandleFhirError(absl::string_view msg,
+                               absl::string_view element_path,
+                               absl::string_view field_path) override {
     return absl::InternalError(
         "ValidationResultsErrorHandler should only use FHIRPath APIs.");
     return absl::OkStatus();
   }
 
-  absl::Status HandleFhirWarning(std::string_view msg,
-                                 std::string_view element_path,
-                                 std::string_view field_path) override {
+  absl::Status HandleFhirWarning(absl::string_view msg,
+                                 absl::string_view element_path,
+                                 absl::string_view field_path) override {
     return absl::InternalError(
         "ValidationResultsErrorHandler should only use FHIRPath APIs.");
     return absl::OkStatus();
@@ -223,13 +223,14 @@ FhirPathValidator::MessageConstraints* FhirPathValidator::ConstraintsFor(
     const Descriptor* descriptor,
     const PrimitiveHandler* primitive_handler) const {
   // Simply return the cached constraint if it exists.
-  auto iter = constraints_cache_.find(descriptor->full_name());
+  std::unique_ptr<MessageConstraints>& constraints =
+      constraints_cache_[std::string(descriptor->full_name())];
 
-  if (iter != constraints_cache_.end()) {
-    return iter->second.get();
+  if (constraints != nullptr) {
+    return constraints.get();
   }
 
-  auto constraints = std::make_unique<MessageConstraints>();
+  constraints = std::make_unique<MessageConstraints>();
   AddMessageConstraints(descriptor, Severity::kFailure, primitive_handler,
                         &constraints->message_error_expressions);
   AddMessageConstraints(descriptor, Severity::kWarning, primitive_handler,
@@ -243,11 +244,6 @@ FhirPathValidator::MessageConstraints* FhirPathValidator::ConstraintsFor(
                         primitive_handler,
                         &constraints->field_warning_expressions);
   }
-
-  // Add the successful constraints to the cache while keeping a local
-  // reference.
-  MessageConstraints* constraints_local = constraints.get();
-  constraints_cache_[descriptor->full_name()] = std::move(constraints);
 
   // Now we recursively look for fields with constraints.
   for (int i = 0; i < descriptor->field_count(); i++) {
@@ -267,12 +263,12 @@ FhirPathValidator::MessageConstraints* FhirPathValidator::ConstraintsFor(
           !child_constraints->field_error_expressions.empty() ||
           !child_constraints->field_warning_expressions.empty() ||
           !child_constraints->nested_with_constraints.empty()) {
-        constraints_local->nested_with_constraints.push_back(field);
+        constraints->nested_with_constraints.push_back(field);
       }
     }
   }
 
-  return constraints_local;
+  return constraints.get();
 }
 
 // Validates the given message against a given FHIRPath expression.
@@ -325,7 +321,7 @@ std::string PathTerm(const Message& message, const FieldDescriptor* field) {
       IsChoiceTypeContainer(message.GetDescriptor())) {
     return absl::StrCat("ofType(", field->message_type()->name(), ")");
   }
-  return FhirJsonName(field);
+  return std::string(FhirJsonName(field));
 }
 
 namespace {

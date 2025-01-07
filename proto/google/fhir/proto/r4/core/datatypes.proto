@@ -703,7 +703,7 @@ message Date {
   option (.google.fhir.proto.fhir_structure_definition_url) =
       "http://hl7.org/fhir/StructureDefinition/date";
 
-  // The absolute time of the event as a Unix epoch in mircoseconds.
+  // The absolute time of the event as a Unix epoch in microseconds.
   int64 value_us = 1;
 
   // The local timezone in which the event was recorded.
@@ -734,7 +734,7 @@ message DateTime {
   option (.google.fhir.proto.fhir_structure_definition_url) =
       "http://hl7.org/fhir/StructureDefinition/dateTime";
 
-  // The absolute time of the event as a Unix epoch in mircoseconds.
+  // The absolute time of the event as a Unix epoch in microseconds.
   int64 value_us = 1;
 
   // The local timezone in which the event was recorded.
@@ -1913,7 +1913,7 @@ message Instant {
   option (.google.fhir.proto.fhir_structure_definition_url) =
       "http://hl7.org/fhir/StructureDefinition/instant";
 
-  // The absolute time of the event as a Unix epoch in mircoseconds.
+  // The absolute time of the event as a Unix epoch in microseconds.
   int64 value_us = 1;
 
   // The local timezone in which the event was recorded.
@@ -2586,7 +2586,7 @@ message Reference {
     option (.google.fhir.proto.fhir_oneof_is_optional) = true;
 
     // Field representing absolute URIs, which are untyped.
-    String uri = 4 [json_name = "reference"];
+    String uri = 4;
 
     // Field representing fragment URIs, which are untyped, and represented here
     // without the leading '#'
@@ -3239,7 +3239,7 @@ message Time {
   option (.google.fhir.proto.fhir_structure_definition_url) =
       "http://hl7.org/fhir/StructureDefinition/time";
 
-  // The absolute time of the event as a Unix epoch in mircoseconds.
+  // The absolute time of the event as a Unix epoch in microseconds.
   int64 value_us = 1;
 
   enum Precision {

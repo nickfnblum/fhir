@@ -17,8 +17,10 @@ package jsonpbhelper
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +32,9 @@ import (
 	d4pb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/datatypes_go_proto"
 	r4basicpb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/resources/basic_go_proto"
 	r4patientpb "github.com/google/fhir/go/proto/google/fhir/proto/r4/core/resources/patient_go_proto"
+	d5pb "github.com/google/fhir/go/proto/google/fhir/proto/r5/core/datatypes_go_proto"
+	r5basicpb "github.com/google/fhir/go/proto/google/fhir/proto/r5/core/resources/basic_go_proto"
+	r5patientpb "github.com/google/fhir/go/proto/google/fhir/proto/r5/core/resources/patient_go_proto"
 	c3pb "github.com/google/fhir/go/proto/google/fhir/proto/stu3/codes_go_proto"
 	d3pb "github.com/google/fhir/go/proto/google/fhir/proto/stu3/datatypes_go_proto"
 	e3pb "github.com/google/fhir/go/proto/google/fhir/proto/stu3/fhirproto_extensions_go_proto"
@@ -990,6 +995,10 @@ func TestExtensionFieldName(t *testing.T) {
 			"http://example.org//",
 			"",
 		},
+		{
+			"http://example.com/" + strings.Repeat("a", 301),
+			strings.Repeat("a", 300),
+		},
 	}
 	for _, test := range tests {
 		if got := ExtensionFieldName(test.url); got != test.want {
@@ -1022,6 +1031,10 @@ func TestFullExtensionFieldName(t *testing.T) {
 			"1",
 			"_1",
 		},
+		{
+			"http://example.com/" + strings.Repeat("a", 300),
+			"example_com_" + strings.Repeat("a", 288),
+		},
 	}
 	for _, test := range tests {
 		if got := FullExtensionFieldName(test.url); got != test.want {
@@ -1039,9 +1052,13 @@ func TestValidateOID(t *testing.T) {
 		"urn:oid:1.2.3.4",
 		"urn:oid:1.100",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Oid{}).MatchString(test); !ok {
-			t.Errorf("OID regex: expected %q to be valid", test)
+	for _, typ := range []proto.Message{&d4pb.Oid{}, &d5pb.Oid{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); !ok {
+					t.Errorf("OID regex: expected %q to be valid", test)
+				}
+			})
 		}
 	}
 }
@@ -1052,9 +1069,13 @@ func TestValidateOID_Invalid(t *testing.T) {
 		"urn:oid:999",
 		"urn:oid:01",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Oid{}).MatchString(test); ok {
-			t.Errorf("OID regex: expected %q to be invalid", test)
+	for _, typ := range []proto.Message{&d4pb.Oid{}, &d5pb.Oid{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); ok {
+					t.Errorf("OID regex: expected %q to be invalid", test)
+				}
+			})
 		}
 	}
 }
@@ -1068,9 +1089,13 @@ func TestValidateID(t *testing.T) {
 		// 64 characters, meets length limit.
 		"1234567890123456789012345678901234567890123456789012345678901234",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Id{}).MatchString(test); !ok {
-			t.Errorf("ID regex: expected %q to be valid", test)
+	for _, typ := range []proto.Message{&d4pb.Id{}, &d5pb.Id{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); !ok {
+					t.Errorf("ID regex: expected %q to be valid", test)
+				}
+			})
 		}
 	}
 }
@@ -1083,9 +1108,13 @@ func TestValidateID_Invalid(t *testing.T) {
 		"12345678901234567890123456789012345678901234567890123456789012345",
 		"",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Id{}).MatchString(test); ok {
-			t.Errorf("ID regex: expected %q to be invalid", test)
+	for _, typ := range []proto.Message{&d4pb.Id{}, &d5pb.Id{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); ok {
+					t.Errorf("ID regex: expected %q to be invalid", test)
+				}
+			})
 		}
 	}
 }
@@ -1097,9 +1126,13 @@ func TestValidateCode(t *testing.T) {
 		"http://example.com/code",
 		"a value",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Code{}).MatchString(test); !ok {
-			t.Errorf("Code regex: expected %q to be valid", test)
+	for _, typ := range []proto.Message{&d4pb.Code{}, &d5pb.Code{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); !ok {
+					t.Errorf("Code regex: expected %q to be valid", test)
+				}
+			})
 		}
 	}
 }
@@ -1112,9 +1145,13 @@ func TestValidateCode_Invalid(t *testing.T) {
 		"",
 		"bad  value",
 	}
-	for _, test := range tests {
-		if ok := regexForType(&d4pb.Code{}).MatchString(test); ok {
-			t.Errorf("Code regex: expected %q to be invalid", test)
+	for _, typ := range []proto.Message{&d4pb.Code{}, &d5pb.Code{}} {
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("%T", typ), func(t *testing.T) {
+				if ok := regexForType(typ).MatchString(test); ok {
+					t.Errorf("Code regex: expected %q to be invalid", test)
+				}
+			})
 		}
 	}
 }
@@ -1204,22 +1241,22 @@ func TestTime(t *testing.T) {
 	}
 	// Test time parsing
 	for _, test := range tests {
-		got, err := ParseTime([]byte(strconv.Quote(test.json)))
+		got, err := parseTimeToGoTime([]byte(strconv.Quote(test.json)))
 		if err != nil {
-			t.Fatalf("ParseTime(%q): %v", test.json, err)
+			t.Fatalf("parseTimeToGoTime(%q): %v", test.json, err)
 		}
 		if want := test.time; !cmp.Equal(want, got) {
-			t.Errorf("ParseTime(%q): got %v, want %v", test.json, got, want)
+			t.Errorf("parseTimeToGoTime(%q): got %v, want %v", test.json, got, want)
 		}
 	}
 	// Test time serializing
 	for _, test := range tests {
-		got, err := SerializeTime(test.time.ValueUs, test.time.Precision)
+		got, err := serializeTime(test.time.ValueUs, test.time.Precision)
 		if err != nil {
-			t.Fatalf("SerializeTime(%q): %v", test.json, err)
+			t.Fatalf("serializeTime(%q): %v", test.json, err)
 		}
 		if want := test.json; want != got {
-			t.Errorf("SerializeTime(%q): got %q, want %q", test.json, got, want)
+			t.Errorf("serializeTime(%q): got %q, want %q", test.json, got, want)
 		}
 	}
 }
@@ -1239,15 +1276,15 @@ func TestParseTime_Invalid(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		if _, err := ParseTime(test.time); err == nil {
-			t.Errorf("ParseTime(%q) succeeded, want error", string(test.time))
+		if _, err := parseTimeToGoTime(test.time); err == nil {
+			t.Errorf("parseTimeToGoTime(%q) succeeded, want error", string(test.time))
 		}
 	}
 }
 
 func TestSerializeTime_Invalid(t *testing.T) {
 	time := Time{ValueUs: 43200000000, Precision: PrecisionUnspecified}
-	if _, err := SerializeTime(time.ValueUs, time.Precision); err == nil {
+	if _, err := serializeTime(time.ValueUs, time.Precision); err == nil {
 		t.Errorf("ParseTime(%v) succeeded, want error", t)
 	}
 }
@@ -1355,6 +1392,61 @@ func TestValidateReferenceType(t *testing.T) {
 			&d4pb.Reference{
 				Reference: &d4pb.Reference_PatientId{
 					PatientId: &d4pb.ReferenceId{Value: "1"},
+				},
+			},
+			false,
+		},
+		{
+			"r5 valid reference",
+			&r5patientpb.Patient{},
+			"managing_organization",
+			&d5pb.Reference{
+				Reference: &d5pb.Reference_OrganizationId{
+					OrganizationId: &d5pb.ReferenceId{Value: "1"},
+				},
+			},
+			true,
+		},
+		{
+			"r5 URI reference",
+			&r5patientpb.Patient{},
+			"managing_organization",
+			&d5pb.Reference{
+				Reference: &d5pb.Reference_Uri{
+					Uri: &d5pb.String{Value: "Patient/1"},
+				},
+			},
+			true,
+		},
+		{
+			"r5 fragment reference",
+			&r5patientpb.Patient{},
+			"managing_organization",
+			&d5pb.Reference{
+				Reference: &d5pb.Reference_Fragment{
+					Fragment: &d5pb.String{Value: "#1"},
+				},
+			},
+			true,
+		},
+		{
+			"r5 reference of any type",
+			&r5basicpb.Basic{},
+			"subject",
+			&d5pb.Reference{
+				Reference: &d5pb.Reference_AccountId{
+					AccountId: &d5pb.ReferenceId{Value: "1"},
+				},
+			},
+			true,
+		},
+		{
+			"r5 invalid reference",
+			&r5patientpb.Patient{},
+			"managing_organization",
+			&d5pb.Reference{
+				Reference: &d5pb.Reference_PatientId{
+					PatientId: &d5pb.ReferenceId{Value: "1"},
 				},
 			},
 			false,
